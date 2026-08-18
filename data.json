@@ -1,0 +1,8 @@
+{
+  "shortcuts": [
+  ],
+  "openOnStartup": true,
+  "headerImage": "",
+  "headerHeight": 240,
+  "customCss": "/* ─── CSS customizado do Dashboard ───────────────────\n   Edite aqui para personalizar a aparência.\n   As alterações são aplicadas em tempo real.\n\n   Classes disponíveis:\n   .dashboard-container   → área principal\n   .dashboard-header      → banner/capa\n   .dashboard-title       → título \"Dashboard\"\n   .dashboard-grid        → grade de cards\n   .dashboard-card        → card individual\n   .dashboard-card--folder → card de pasta\n   .dashboard-card-icon   → ícone do card\n   .dashboard-card-name   → nome do atalho\n   .dashboard-card-path   → caminho abaixo do nome\n──────────────────────────────────────────────────── */\n\n"
+}
