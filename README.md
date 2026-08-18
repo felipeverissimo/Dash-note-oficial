@@ -1,5 +1,7 @@
 # Dashsidian
 
+[![GitHub Sponsors](https://img.shields.io/badge/sponsor-%E2%9D%A4-red?logo=github)](https://github.com/sponsors/felipeverissimo)
+
 A customizable home dashboard for Obsidian — pin your favorite notes and folders as visual shortcut cards and open them with a single click.
 
 ## Screenshots
@@ -56,6 +58,10 @@ Right-click any card to change its size, switch orientation, set a custom Lucide
 ### Settings
 
 Open **Settings** then **Dashsidian** to change the Dashboard title, set or remove the header banner image, adjust header height, write or import custom CSS, and toggle whether the Dashboard opens automatically on Obsidian startup.
+
+## Support
+
+If you find Dashsidian useful, consider supporting its development via [GitHub Sponsors](https://github.com/sponsors/felipeverissimo). It helps keep the plugin maintained and new features coming.
 
 ## License
 
