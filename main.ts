@@ -11,11 +11,12 @@ import {
   TFile,
   TFolder,
   WorkspaceLeaf,
+  normalizePath,
   setIcon,
 } from "obsidian";
 
 const DASHBOARD_VIEW_TYPE = "dashboard-view";
-const CUSTOM_CSS_STYLE_ID = "dashboard-plugin-custom-css";
+const SNIPPET_ID = "dash-note-custom";
 const IMAGE_EXTENSIONS = /\.(png|jpg|jpeg|gif|webp|svg|avif|bmp)$/i;
 
 const DEFAULT_CSS = `/* ─── CSS customizado do Dashboard ───────────────────
@@ -35,6 +36,24 @@ const DEFAULT_CSS = `/* ─── CSS customizado do Dashboard ─────�
 ──────────────────────────────────────────────────── */
 
 `;
+
+// Internal Obsidian APIs not exposed in public type definitions
+interface ObsidianCustomCss {
+  themes: string[];
+  theme: string;
+  setTheme: (theme: string) => void;
+  setSnippetEnabled: (id: string, enable: boolean) => void;
+  requestLoadSnippets?: () => Promise<void>;
+}
+
+interface ObsidianVaultInternal {
+  setConfig: (key: string, value: string) => void;
+}
+
+interface ObsidianFileExplorerView {
+  revealInFolder?: (file: TAbstractFile) => Promise<void>;
+  fileItems?: Record<string, { setCollapsed: (collapsed: boolean) => void }>;
+}
 
 interface Shortcut {
   path: string;
@@ -79,7 +98,7 @@ export default class DashboardPlugin extends Plugin {
 
   async onload() {
     await this.loadSettings();
-    this.applyCustomCss();
+    await this.applyCustomCss();
 
     this.registerView(
       DASHBOARD_VIEW_TYPE,
@@ -87,13 +106,13 @@ export default class DashboardPlugin extends Plugin {
     );
 
     this.addRibbonIcon("home", "Abrir Dashboard", () => {
-      this.activateDashboard();
+      void this.activateDashboard();
     });
 
     this.addCommand({
       id: "open-dashboard",
       name: "Abrir Dashboard",
-      callback: () => this.activateDashboard(),
+      callback: () => void this.activateDashboard(),
     });
 
     // Single file/folder context menu
@@ -107,14 +126,14 @@ export default class DashboardPlugin extends Plugin {
             item
               .setTitle("Fixar no Dashboard")
               .setIcon("pin")
-              .onClick(() => this.addShortcut(file));
+              .onClick(() => void this.addShortcut(file));
           });
         } else {
           menu.addItem((item) => {
             item
               .setTitle("Remover do Dashboard")
               .setIcon("pin-off")
-              .onClick(() => this.removeShortcut(file.path));
+              .onClick(() => void this.removeShortcut(file.path));
           });
         }
       })
@@ -132,10 +151,12 @@ export default class DashboardPlugin extends Plugin {
           item
             .setTitle(`Fixar ${toAdd.length} ${toAdd.length === 1 ? "item" : "itens"} no Dashboard`)
             .setIcon("pin")
-            .onClick(async () => {
-              for (const file of toAdd) {
-                await this.addShortcut(file);
-              }
+            .onClick(() => {
+              void (async () => {
+                for (const file of toAdd) {
+                  await this.addShortcut(file);
+                }
+              })();
             });
         });
       })
@@ -145,24 +166,42 @@ export default class DashboardPlugin extends Plugin {
 
     if (this.settings.openOnStartup) {
       this.app.workspace.onLayoutReady(() => {
-        this.activateDashboard();
+        void this.activateDashboard();
       });
     }
   }
 
   onunload() {
-    this.app.workspace.detachLeavesOfType(DASHBOARD_VIEW_TYPE);
-    document.getElementById(CUSTOM_CSS_STYLE_ID)?.remove();
+    void this.disableCustomCssSnippet();
   }
 
-  applyCustomCss() {
-    let el = document.getElementById(CUSTOM_CSS_STYLE_ID) as HTMLStyleElement | null;
-    if (!el) {
-      el = document.createElement("style");
-      el.id = CUSTOM_CSS_STYLE_ID;
-      document.head.appendChild(el);
+  async applyCustomCss() {
+    const snippetsDir = normalizePath(`${this.app.vault.configDir}/snippets`);
+    const snippetPath = normalizePath(`${snippetsDir}/${SNIPPET_ID}.css`);
+    try {
+      if (!await this.app.vault.adapter.exists(snippetsDir)) {
+        await this.app.vault.adapter.mkdir(snippetsDir);
+      }
+      await this.app.vault.adapter.write(snippetPath, this.settings.customCss ?? "");
+      const internalCss = (this.app as unknown as { customCss: ObsidianCustomCss }).customCss;
+      if (internalCss) {
+        internalCss.setSnippetEnabled(SNIPPET_ID, true);
+        await internalCss.requestLoadSnippets?.();
+      }
+    } catch (e) {
+      console.error("Dashboard plugin: failed to apply CSS snippet", e);
     }
-    el.textContent = this.settings.customCss ?? "";
+  }
+
+  private async disableCustomCssSnippet() {
+    try {
+      const internalCss = (this.app as unknown as { customCss: ObsidianCustomCss }).customCss;
+      if (internalCss) {
+        internalCss.setSnippetEnabled(SNIPPET_ID, false);
+      }
+    } catch {
+      // ignore
+    }
   }
 
   async activateDashboard() {
@@ -172,7 +211,7 @@ export default class DashboardPlugin extends Plugin {
       leaf = workspace.getLeaf(false);
       await leaf.setViewState({ type: DASHBOARD_VIEW_TYPE, active: true });
     }
-    workspace.revealLeaf(leaf);
+    await workspace.revealLeaf(leaf);
   }
 
   async addShortcut(file: TAbstractFile) {
@@ -198,7 +237,7 @@ export default class DashboardPlugin extends Plugin {
     const s = this.settings.shortcuts[index];
     Object.assign(s, updates);
     (Object.keys(updates) as Array<keyof Shortcut>).forEach((key) => {
-      if (updates[key] === undefined) delete (s as any)[key];
+      if (updates[key] === undefined) delete (s as unknown as Record<string, unknown>)[key];
     });
     await this.saveSettings();
     this.refreshDashboard();
@@ -230,7 +269,11 @@ export default class DashboardPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    this.settings = Object.assign(
+      {},
+      DEFAULT_SETTINGS,
+      await this.loadData() as Partial<DashboardSettings>
+    );
   }
 
   async saveSettings() {
@@ -359,12 +402,12 @@ class DashboardView extends ItemView {
       const bgFile = this.app.vault.getAbstractFileByPath(backgroundImage);
       if (bgFile instanceof TFile) {
         container.addClass("dashboard-container--has-background");
-        container.style.backgroundImage = `url("${this.app.vault.getResourcePath(bgFile)}")`;
+        container.setCssStyles({ backgroundImage: `url("${this.app.vault.getResourcePath(bgFile)}")` });
       } else {
-        container.style.backgroundImage = "";
+        container.setCssStyles({ backgroundImage: "" });
       }
     } else {
-      container.style.backgroundImage = "";
+      container.setCssStyles({ backgroundImage: "" });
     }
 
     if (this.plugin.settings.showHeader) {
@@ -384,7 +427,7 @@ class DashboardView extends ItemView {
       searchInput.addEventListener("input", () => {
         this.searchQuery = searchInput.value;
         this.render();
-        const newInput = this.containerEl.querySelector(".dashboard-search-input") as HTMLInputElement | null;
+        const newInput = this.containerEl.querySelector<HTMLInputElement>(".dashboard-search-input");
         if (newInput) {
           newInput.focus();
           const len = newInput.value.length;
@@ -418,7 +461,7 @@ class DashboardView extends ItemView {
       if (file instanceof TFile) {
         const url = this.app.vault.getResourcePath(file);
         header.addClass("dashboard-header--has-image");
-        header.style.backgroundImage = `url("${url}")`;
+        header.setCssStyles({ backgroundImage: `url("${url}")` });
       }
     }
 
@@ -433,10 +476,12 @@ class DashboardView extends ItemView {
     setIcon(changeBtn, "image");
     changeBtn.setAttribute("aria-label", "Alterar imagem de capa");
     changeBtn.addEventListener("click", () => {
-      new ImagePickerModal(this.app, async (file) => {
-        this.plugin.settings.headerImage = file.path;
-        await this.plugin.saveSettings();
-        this.render();
+      new ImagePickerModal(this.app, (file) => {
+        void (async () => {
+          this.plugin.settings.headerImage = file.path;
+          await this.plugin.saveSettings();
+          this.render();
+        })();
       }).open();
     });
 
@@ -446,10 +491,12 @@ class DashboardView extends ItemView {
       );
       setIcon(removeBtn, "image-off");
       removeBtn.setAttribute("aria-label", "Remover imagem de capa");
-      removeBtn.addEventListener("click", async () => {
-        this.plugin.settings.headerImage = "";
-        await this.plugin.saveSettings();
-        this.render();
+      removeBtn.addEventListener("click", () => {
+        void (async () => {
+          this.plugin.settings.headerImage = "";
+          await this.plugin.saveSettings();
+          this.render();
+        })();
       });
     }
   }
@@ -468,7 +515,7 @@ class DashboardView extends ItemView {
   // ── Cards ──────────────────────────────────────────────────────────────────
 
   private renderCardIcon(el: HTMLElement, shortcut: Shortcut) {
-    if (shortcut.imageFill) return; // CSS oculta o ícone no modo fill
+    if (shortcut.imageFill) return;
     if (shortcut.customImage) {
       const imageFile = this.app.vault.getAbstractFileByPath(shortcut.customImage);
       if (imageFile instanceof TFile) {
@@ -486,19 +533,19 @@ class DashboardView extends ItemView {
 
     const size = shortcut.cardSize ?? "medium";
     menu.addItem((item) => item.setTitle("Pequeno").setChecked(size === "small")
-      .onClick(() => this.plugin.updateShortcut(index, { cardSize: "small" })));
+      .onClick(() => void this.plugin.updateShortcut(index, { cardSize: "small" })));
     menu.addItem((item) => item.setTitle("Médio").setChecked(size === "medium")
-      .onClick(() => this.plugin.updateShortcut(index, { cardSize: "medium" })));
+      .onClick(() => void this.plugin.updateShortcut(index, { cardSize: "medium" })));
     menu.addItem((item) => item.setTitle("Grande").setChecked(size === "large")
-      .onClick(() => this.plugin.updateShortcut(index, { cardSize: "large" })));
+      .onClick(() => void this.plugin.updateShortcut(index, { cardSize: "large" })));
 
     menu.addSeparator();
 
     const orientation = shortcut.cardOrientation ?? "vertical";
     menu.addItem((item) => item.setTitle("Vertical").setChecked(orientation === "vertical")
-      .onClick(() => this.plugin.updateShortcut(index, { cardOrientation: "vertical" })));
+      .onClick(() => void this.plugin.updateShortcut(index, { cardOrientation: "vertical" })));
     menu.addItem((item) => item.setTitle("Horizontal").setChecked(orientation === "horizontal")
-      .onClick(() => this.plugin.updateShortcut(index, { cardOrientation: "horizontal" })));
+      .onClick(() => void this.plugin.updateShortcut(index, { cardOrientation: "horizontal" })));
 
     menu.addSeparator();
 
@@ -506,26 +553,26 @@ class DashboardView extends ItemView {
       .setTitle("Alterar ícone…")
       .setIcon("smile")
       .onClick(() => new IconPickerModal(this.app, shortcut.customIcon ?? "", (icon) => {
-        this.plugin.updateShortcut(index, { customIcon: icon, customImage: undefined });
+        void this.plugin.updateShortcut(index, { customIcon: icon, customImage: undefined });
       }).open()));
     menu.addItem((item) => item
       .setTitle("Usar imagem…")
       .setIcon("image")
       .onClick(() => new ImagePickerModal(this.app, (file) => {
-        this.plugin.updateShortcut(index, { customImage: file.path, customIcon: undefined, imageFill: true });
+        void this.plugin.updateShortcut(index, { customImage: file.path, customIcon: undefined, imageFill: true });
       }).open()));
     if (shortcut.customImage) {
       menu.addItem((item) => item
         .setTitle(shortcut.imageFill ? "Mostrar como ícone" : "Preencher card com imagem")
         .setIcon(shortcut.imageFill ? "shrink" : "expand")
         .setChecked(!!shortcut.imageFill)
-        .onClick(() => this.plugin.updateShortcut(index, { imageFill: !shortcut.imageFill })));
+        .onClick(() => void this.plugin.updateShortcut(index, { imageFill: !shortcut.imageFill })));
     }
     if (shortcut.customIcon || shortcut.customImage) {
       menu.addItem((item) => item
         .setTitle("Resetar ícone padrão")
         .setIcon("refresh-cw")
-        .onClick(() => this.plugin.updateShortcut(index, { customIcon: undefined, customImage: undefined, imageFill: undefined })));
+        .onClick(() => void this.plugin.updateShortcut(index, { customIcon: undefined, customImage: undefined, imageFill: undefined })));
     }
 
     menu.addSeparator();
@@ -533,7 +580,7 @@ class DashboardView extends ItemView {
     menu.addItem((item) => item
       .setTitle("Remover do Dashboard")
       .setIcon("pin-off")
-      .onClick(() => this.plugin.removeShortcut(shortcut.path)));
+      .onClick(() => void this.plugin.removeShortcut(shortcut.path)));
 
     menu.showAtMouseEvent(e);
   }
@@ -551,7 +598,7 @@ class DashboardView extends ItemView {
       const imgFile = this.app.vault.getAbstractFileByPath(shortcut.customImage);
       if (imgFile instanceof TFile) {
         card.addClass("dashboard-card--image-fill");
-        card.style.backgroundImage = `url("${this.app.vault.getResourcePath(imgFile)}")`;
+        card.setCssStyles({ backgroundImage: `url("${this.app.vault.getResourcePath(imgFile)}")` });
       }
     }
 
@@ -567,10 +614,10 @@ class DashboardView extends ItemView {
     removeBtn.setAttribute("aria-label", "Remover do Dashboard");
     removeBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      this.plugin.removeShortcut(shortcut.path);
+      void this.plugin.removeShortcut(shortcut.path);
     });
 
-    card.addEventListener("click", () => this.openShortcut(shortcut));
+    card.addEventListener("click", () => void this.openShortcut(shortcut));
     card.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -602,9 +649,9 @@ class DashboardView extends ItemView {
           dragged.type === "file" &&
           dragged.path.startsWith(shortcut.path + "/")
         ) {
-          this.plugin.nestShortcut(this.dragSrcIndex, shortcut.path);
+          void this.plugin.nestShortcut(this.dragSrcIndex, shortcut.path);
         } else {
-          this.plugin.moveShortcut(this.dragSrcIndex, index);
+          void this.plugin.moveShortcut(this.dragSrcIndex, index);
         }
       }
       this.dragSrcIndex = null;
@@ -654,12 +701,12 @@ class DashboardView extends ItemView {
     detachBtn.setAttribute("aria-label", "Soltar da pasta");
     detachBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      this.plugin.unnestShortcut(index);
+      void this.plugin.unnestShortcut(index);
     });
 
     item.addEventListener("click", (e) => {
       e.stopPropagation();
-      this.openShortcut(shortcut);
+      void this.openShortcut(shortcut);
     });
   }
 
@@ -675,18 +722,18 @@ class DashboardView extends ItemView {
     const explorerLeaves = this.app.workspace.getLeavesOfType("file-explorer");
     if (explorerLeaves.length === 0) return;
     const explorerLeaf = explorerLeaves[0];
-    this.app.workspace.revealLeaf(explorerLeaf);
+    await this.app.workspace.revealLeaf(explorerLeaf);
 
     const folder = this.app.vault.getAbstractFileByPath(shortcut.path);
     if (!folder) return;
 
-    const view = explorerLeaf.view as any;
+    const view = explorerLeaf.view as unknown as ObsidianFileExplorerView;
     if (typeof view.revealInFolder === "function") {
       await view.revealInFolder(folder);
     }
-    const item = (view.fileItems as Record<string, any> | undefined)?.[shortcut.path];
-    if (item && typeof item.setCollapsed === "function") {
-      item.setCollapsed(false);
+    const fileItem = view.fileItems?.[shortcut.path];
+    if (fileItem && typeof fileItem.setCollapsed === "function") {
+      fileItem.setCollapsed(false);
     }
   }
 }
@@ -704,7 +751,7 @@ class DashboardSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "Dashboard" });
+    new Setting(containerEl).setName("Dashboard").setHeading();
 
     this.renderGeneralSection(containerEl);
     this.renderHeaderSection(containerEl);
@@ -717,7 +764,7 @@ class DashboardSettingTab extends PluginSettingTab {
   // ── General ────────────────────────────────────────────────────────────────
 
   private renderGeneralSection(el: HTMLElement) {
-    el.createEl("h3", { text: "Geral" });
+    new Setting(el).setName("Geral").setHeading();
     new Setting(el)
       .setName("Título do Dashboard")
       .setDesc("Texto exibido como título no painel principal.")
@@ -725,39 +772,36 @@ class DashboardSettingTab extends PluginSettingTab {
         t
           .setPlaceholder("Dashboard")
           .setValue(this.plugin.settings.dashboardTitle)
-          .onChange(async (value) => {
+          .onChange((value) => {
             this.plugin.settings.dashboardTitle = value;
-            await this.plugin.saveSettings();
-            this.plugin.refreshDashboard();
+            void this.plugin.saveSettings().then(() => this.plugin.refreshDashboard());
           })
       );
     new Setting(el)
       .setName("Mostrar título")
       .setDesc("Exibir o título na área do cabeçalho.")
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.showTitle).onChange(async (v) => {
+        t.setValue(this.plugin.settings.showTitle).onChange((v) => {
           this.plugin.settings.showTitle = v;
-          await this.plugin.saveSettings();
-          this.plugin.refreshDashboard();
+          void this.plugin.saveSettings().then(() => this.plugin.refreshDashboard());
         })
       );
     new Setting(el)
       .setName("Mostrar cabeçalho")
       .setDesc("Exibir a área de cabeçalho (banner/imagem de capa). Ao desativar, o título e a imagem de capa ficam ocultos.")
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.showHeader).onChange(async (v) => {
+        t.setValue(this.plugin.settings.showHeader).onChange((v) => {
           this.plugin.settings.showHeader = v;
-          await this.plugin.saveSettings();
-          this.plugin.refreshDashboard();
+          void this.plugin.saveSettings().then(() => this.plugin.refreshDashboard());
         })
       );
     new Setting(el)
       .setName("Abrir ao iniciar")
       .setDesc("Abrir o Dashboard automaticamente quando o Obsidian iniciar.")
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.openOnStartup).onChange(async (v) => {
+        t.setValue(this.plugin.settings.openOnStartup).onChange((v) => {
           this.plugin.settings.openOnStartup = v;
-          await this.plugin.saveSettings();
+          void this.plugin.saveSettings();
         })
       );
   }
@@ -765,7 +809,7 @@ class DashboardSettingTab extends PluginSettingTab {
   // ── Header image ───────────────────────────────────────────────────────────
 
   private renderHeaderSection(el: HTMLElement) {
-    el.createEl("h3", { text: "Imagem de capa" });
+    new Setting(el).setName("Imagem de capa").setHeading();
 
     const current = this.plugin.settings.headerImage;
     new Setting(el)
@@ -776,24 +820,28 @@ class DashboardSettingTab extends PluginSettingTab {
           .setButtonText("Escolher")
           .setIcon("image")
           .onClick(() => {
-            new ImagePickerModal(this.app, async (file) => {
-              this.plugin.settings.headerImage = file.path;
-              await this.plugin.saveSettings();
-              this.plugin.refreshDashboard();
-              this.display();
+            new ImagePickerModal(this.app, (file) => {
+              void (async () => {
+                this.plugin.settings.headerImage = file.path;
+                await this.plugin.saveSettings();
+                this.plugin.refreshDashboard();
+                this.display();
+              })();
             }).open();
           })
       )
       .addButton((btn) =>
         btn
           .setButtonText("Remover")
-          .setWarning()
+          .setDestructive()
           .setDisabled(!current)
-          .onClick(async () => {
-            this.plugin.settings.headerImage = "";
-            await this.plugin.saveSettings();
-            this.plugin.refreshDashboard();
-            this.display();
+          .onClick(() => {
+            void (async () => {
+              this.plugin.settings.headerImage = "";
+              await this.plugin.saveSettings();
+              this.plugin.refreshDashboard();
+              this.display();
+            })();
           })
       );
 
@@ -803,11 +851,9 @@ class DashboardSettingTab extends PluginSettingTab {
         s
           .setLimits(120, 500, 10)
           .setValue(this.plugin.settings.headerHeight)
-          .setDynamicTooltip()
-          .onChange(async (v) => {
+          .onChange((v) => {
             this.plugin.settings.headerHeight = v;
-            await this.plugin.saveSettings();
-            this.plugin.refreshDashboard();
+            void this.plugin.saveSettings().then(() => this.plugin.refreshDashboard());
           })
       );
   }
@@ -815,7 +861,7 @@ class DashboardSettingTab extends PluginSettingTab {
   // ── Background image ───────────────────────────────────────────────────────
 
   private renderBackgroundSection(el: HTMLElement) {
-    el.createEl("h3", { text: "Imagem de fundo" });
+    new Setting(el).setName("Imagem de fundo").setHeading();
 
     const current = this.plugin.settings.backgroundImage;
     new Setting(el)
@@ -826,24 +872,28 @@ class DashboardSettingTab extends PluginSettingTab {
           .setButtonText("Escolher")
           .setIcon("image")
           .onClick(() => {
-            new ImagePickerModal(this.app, async (file) => {
-              this.plugin.settings.backgroundImage = file.path;
-              await this.plugin.saveSettings();
-              this.plugin.refreshDashboard();
-              this.display();
+            new ImagePickerModal(this.app, (file) => {
+              void (async () => {
+                this.plugin.settings.backgroundImage = file.path;
+                await this.plugin.saveSettings();
+                this.plugin.refreshDashboard();
+                this.display();
+              })();
             }).open();
           })
       )
       .addButton((btn) =>
         btn
           .setButtonText("Remover")
-          .setWarning()
+          .setDestructive()
           .setDisabled(!current)
-          .onClick(async () => {
-            this.plugin.settings.backgroundImage = "";
-            await this.plugin.saveSettings();
-            this.plugin.refreshDashboard();
-            this.display();
+          .onClick(() => {
+            void (async () => {
+              this.plugin.settings.backgroundImage = "";
+              await this.plugin.saveSettings();
+              this.plugin.refreshDashboard();
+              this.display();
+            })();
           })
       );
   }
@@ -851,9 +901,8 @@ class DashboardSettingTab extends PluginSettingTab {
   // ── Custom CSS ─────────────────────────────────────────────────────────────
 
   private renderCssSection(el: HTMLElement) {
-    el.createEl("h3", { text: "CSS customizado" });
+    new Setting(el).setName("CSS customizado").setHeading();
 
-    // Upload button
     new Setting(el)
       .setName("Importar arquivo .css")
       .setDesc("Carrega um arquivo .css do seu computador e substitui o CSS atual.")
@@ -862,23 +911,24 @@ class DashboardSettingTab extends PluginSettingTab {
           .setButtonText("Carregar arquivo")
           .setIcon("upload")
           .onClick(() => {
-            const input = document.createElement("input");
+            const input = createEl("input");
             input.type = "file";
             input.accept = ".css";
-            input.addEventListener("change", async () => {
-              const file = input.files?.[0];
-              if (!file) return;
-              const text = await file.text();
-              this.plugin.settings.customCss = text;
-              await this.plugin.saveSettings();
-              this.plugin.applyCustomCss();
-              this.display();
+            input.addEventListener("change", () => {
+              void (async () => {
+                const file = input.files?.[0];
+                if (!file) return;
+                const text = await file.text();
+                this.plugin.settings.customCss = text;
+                await this.plugin.saveSettings();
+                await this.plugin.applyCustomCss();
+                this.display();
+              })();
             });
             input.click();
           })
       );
 
-    // Textarea
     el.createEl("p", {
       text: "Ou edite diretamente abaixo. As mudanças são aplicadas em tempo real.",
       cls: "setting-item-description",
@@ -892,25 +942,28 @@ class DashboardSettingTab extends PluginSettingTab {
     textarea.rows = 18;
     textarea.spellcheck = false;
 
-    textarea.addEventListener("input", async () => {
-      this.plugin.settings.customCss = textarea.value;
-      await this.plugin.saveSettings();
-      this.plugin.applyCustomCss();
+    textarea.addEventListener("input", () => {
+      void (async () => {
+        this.plugin.settings.customCss = textarea.value;
+        await this.plugin.saveSettings();
+        await this.plugin.applyCustomCss();
+      })();
     });
 
-    // Reset button
     new Setting(el)
       .setName("Resetar CSS")
       .setDesc("Remove todas as customizações e volta ao CSS padrão.")
       .addButton((btn) =>
         btn
           .setButtonText("Resetar para o padrão")
-          .setWarning()
-          .onClick(async () => {
-            this.plugin.settings.customCss = DEFAULT_CSS;
-            await this.plugin.saveSettings();
-            this.plugin.applyCustomCss();
-            this.display();
+          .setDestructive()
+          .onClick(() => {
+            void (async () => {
+              this.plugin.settings.customCss = DEFAULT_CSS;
+              await this.plugin.saveSettings();
+              await this.plugin.applyCustomCss();
+              this.display();
+            })();
           })
       );
   }
@@ -918,7 +971,7 @@ class DashboardSettingTab extends PluginSettingTab {
   // ── Themes ────────────────────────────────────────────────────────────────
 
   private renderThemeSection(el: HTMLElement) {
-    el.createEl("h3", { text: "Temas" });
+    new Setting(el).setName("Temas").setHeading();
 
     const isDark = document.body.classList.contains("theme-dark");
 
@@ -937,7 +990,8 @@ class DashboardSettingTab extends PluginSettingTab {
       btn.onClick(() => { this.setColorScheme("obsidian"); this.display(); });
     });
 
-    const customCss = (this.app as any).customCss;
+    const internalApp = this.app as unknown as { customCss: ObsidianCustomCss };
+    const customCss = internalApp.customCss;
     if (!customCss) return;
 
     const installedThemes: string[] = customCss.themes ?? [];
@@ -964,7 +1018,7 @@ class DashboardSettingTab extends PluginSettingTab {
   }
 
   private setColorScheme(scheme: "moonstone" | "obsidian") {
-    const vault = this.app.vault as any;
+    const vault = this.app.vault as unknown as ObsidianVaultInternal;
     if (typeof vault.setConfig === "function") vault.setConfig("theme", scheme);
     document.body.removeClass("theme-dark", "theme-light");
     document.body.addClass(scheme === "obsidian" ? "theme-dark" : "theme-light");
@@ -973,7 +1027,7 @@ class DashboardSettingTab extends PluginSettingTab {
   // ── Shortcuts ─────────────────────────────────────────────────────────────
 
   private renderShortcutsSection(el: HTMLElement) {
-    el.createEl("h3", { text: "Atalhos fixados" });
+    new Setting(el).setName("Atalhos fixados").setHeading();
 
     if (this.plugin.settings.shortcuts.length === 0) {
       el.createEl("p", {
@@ -990,11 +1044,13 @@ class DashboardSettingTab extends PluginSettingTab {
         .addButton((btn) =>
           btn
             .setIcon("trash")
-            .setWarning()
+            .setDestructive()
             .setTooltip("Remover")
-            .onClick(async () => {
-              await this.plugin.removeShortcut(shortcut.path);
-              this.display();
+            .onClick(() => {
+              void (async () => {
+                await this.plugin.removeShortcut(shortcut.path);
+                this.display();
+              })();
             })
         );
     });
