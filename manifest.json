@@ -1,6 +1,6 @@
 {
-  "id": "dashsidian",
-  "name": "Dashsidian",
+  "id": "dash-note",
+  "name": "Dash-note",
   "version": "1.0.0",
   "minAppVersion": "0.15.0",
   "description": "Pin notes and folders as one-click shortcut cards on a customizable home dashboard that opens when Obsidian starts.",
