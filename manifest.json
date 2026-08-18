@@ -6,5 +6,6 @@
   "description": "Pin notes and folders as one-click shortcut cards on a customizable home dashboard that opens when Obsidian starts.",
   "author": "Felipe Veríssimo",
   "authorUrl": "https://github.com/felipeverissimo",
-  "isDesktopOnly": false
+  "isDesktopOnly": false,
+  "fundingUrl": "https://github.com/sponsors"
 }
