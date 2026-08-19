@@ -606,8 +606,8 @@ class DashboardView extends ItemView {
     this.renderCardIcon(iconEl, shortcut);
 
     const info = card.createDiv("dashboard-card-info");
-    info.createEl("span", { text: shortcut.name, cls: "dashboard-card-name" });
-    info.createEl("span", { text: shortcut.path, cls: "dashboard-card-path" });
+    info.createSpan({ text: shortcut.name, cls: "dashboard-card-name" });
+    info.createSpan({ text: shortcut.path, cls: "dashboard-card-path" });
 
     const removeBtn = card.createDiv("dashboard-card-remove");
     setIcon(removeBtn, "pin-off");
@@ -693,7 +693,7 @@ class DashboardView extends ItemView {
     const iconEl = item.createDiv("dashboard-card-nested-icon");
     setIcon(iconEl, "file-text");
 
-    const nameEl = item.createEl("span", { text: shortcut.name, cls: "dashboard-card-nested-name" });
+    const nameEl = item.createSpan({ text: shortcut.name, cls: "dashboard-card-nested-name" });
     nameEl.title = shortcut.name;
 
     const detachBtn = item.createDiv("dashboard-card-nested-detach");
@@ -1009,7 +1009,7 @@ class DashboardSettingTab extends PluginSettingTab {
       .setDesc(`Ativo: ${currentTheme || "Padrão"}`)
       .addDropdown((dd) => {
         dd.addOption("", "Padrão");
-        installedThemes.forEach((t) => dd.addOption(t, t));
+        installedThemes.forEach((t) => { dd.addOption(t, t); });
         dd.setValue(currentTheme);
         dd.onChange((v) => {
           if (typeof customCss.setTheme === "function") customCss.setTheme(v);
