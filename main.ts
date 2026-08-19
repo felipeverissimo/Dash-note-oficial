@@ -454,7 +454,7 @@ class DashboardView extends ItemView {
   private renderHeader(container: HTMLElement) {
     const header = container.createDiv("dashboard-header");
     const { headerImage, headerHeight } = this.plugin.settings;
-    header.style.setProperty("--header-height", `${headerHeight}px`);
+    header.setCssProps({ "--header-height": `${headerHeight}px` });
 
     if (headerImage) {
       const file = this.app.vault.getAbstractFileByPath(headerImage);
