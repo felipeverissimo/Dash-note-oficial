@@ -1,4 +1,4 @@
-# Dashsidian
+# Dash-note
 
 [![GitHub Sponsors](https://img.shields.io/badge/sponsor-%E2%9D%A4-red?logo=github)](https://github.com/sponsors/felipeverissimo)
 
@@ -27,19 +27,17 @@ A customizable home dashboard for Obsidian — pin your favorite notes and folde
 
 ### Community Plugin Directory
 
-Once the plugin is listed in the Obsidian community directory (coming soon):
-
 1. Open **Settings** then **Community plugins**
 2. Disable **Restricted mode** if needed
-3. Click **Browse** and search for "Dashsidian"
+3. Click **Browse** and search for **Dash-note**
 4. Install and enable the plugin
 
 ### Manual Installation
 
-1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/felipeverissimo/Dashsidian/releases/latest)
-2. In your vault, create the folder `.obsidian/plugins/dashsidian/` if it does not exist — the folder name `dashsidian` must match exactly; it comes from the `manifest.json` id field
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/felipeverissimo/Dash-note-oficial/releases/latest)
+2. In your vault, create the folder `.obsidian/plugins/dash-note/` if it does not exist — the folder name must match the `id` field in `manifest.json`
 3. Copy the three downloaded files into that folder
-4. Open **Settings** then **Community plugins**, find **Dashsidian** in the list, and enable it. After enabling, the home icon appears in the left ribbon.
+4. Open **Settings** then **Community plugins**, find **Dash-note** in the list, and enable it. After enabling, the home icon appears in the left ribbon.
 
 ## Usage
 
@@ -49,7 +47,7 @@ Right-click any file or folder in the **File Explorer** and select **Pin to Dash
 
 ### Opening the Dashboard
 
-Click the **home icon** in the left ribbon, or open the command palette and run **Dashsidian: Open Dashboard**.
+Click the **home icon** in the left ribbon, or open the command palette and run **Dash-note: Open Dashboard**.
 
 ### Customizing cards
 
@@ -57,11 +55,11 @@ Right-click any card to change its size, switch orientation, set a custom Lucide
 
 ### Settings
 
-Open **Settings** then **Dashsidian** to change the Dashboard title, set or remove the header banner image, adjust header height, write or import custom CSS, and toggle whether the Dashboard opens automatically on Obsidian startup.
+Open **Settings** then **Dash-note** to change the Dashboard title, set or remove the header banner image, adjust header height, write or import custom CSS, and toggle whether the Dashboard opens automatically on startup.
 
 ## Support
 
-If you find Dashsidian useful, consider supporting its development via [GitHub Sponsors](https://github.com/sponsors/felipeverissimo). It helps keep the plugin maintained and new features coming.
+If you find Dash-note useful, consider supporting its development via [GitHub Sponsors](https://github.com/sponsors/felipeverissimo).
 
 ## License
 

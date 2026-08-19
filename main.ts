@@ -7,6 +7,7 @@ import {
   Plugin,
   PluginSettingTab,
   Setting,
+  SettingDefinitionItem,
   TAbstractFile,
   TFile,
   TFolder,
@@ -748,273 +749,193 @@ class DashboardSettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
-  display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
-    new Setting(containerEl).setName("Dashboard").setHeading();
-
-    this.renderGeneralSection(containerEl);
-    this.renderHeaderSection(containerEl);
-    this.renderBackgroundSection(containerEl);
-    this.renderCssSection(containerEl);
-    this.renderThemeSection(containerEl);
-    this.renderShortcutsSection(containerEl);
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    const { settings } = this.plugin;
+    return [
+      // ── Geral ────────────────────────────────────────────────────────────
+      {
+        type: "group" as const,
+        heading: "Geral",
+        items: [
+          {
+            name: "Título do Dashboard",
+            desc: "Texto exibido como título no painel principal.",
+            control: { type: "text" as const, key: "dashboardTitle", placeholder: "Dashboard" },
+          },
+          {
+            name: "Mostrar título",
+            desc: "Exibir o título na área do cabeçalho.",
+            control: { type: "toggle" as const, key: "showTitle" },
+          },
+          {
+            name: "Mostrar cabeçalho",
+            desc: "Exibir a área de cabeçalho. Ao desativar, o título e a imagem de capa ficam ocultos.",
+            control: { type: "toggle" as const, key: "showHeader" },
+          },
+          {
+            name: "Abrir ao iniciar",
+            desc: "Abrir o Dashboard automaticamente quando o app iniciar.",
+            control: { type: "toggle" as const, key: "openOnStartup" },
+          },
+        ],
+      },
+      // ── Imagem de capa ───────────────────────────────────────────────────
+      {
+        type: "group" as const,
+        heading: "Imagem de capa",
+        items: [
+          {
+            name: "Imagem",
+            desc: settings.headerImage || "Nenhuma imagem definida.",
+            control: {
+              type: "file" as const,
+              key: "headerImage",
+              filter: (f: TFile) => IMAGE_EXTENSIONS.test(f.name),
+            },
+          },
+          {
+            name: "Altura da capa (px)",
+            control: { type: "slider" as const, key: "headerHeight", min: 120, max: 500, step: 10 },
+          },
+        ],
+      },
+      // ── Imagem de fundo ──────────────────────────────────────────────────
+      {
+        type: "group" as const,
+        heading: "Imagem de fundo",
+        items: [
+          {
+            name: "Imagem de fundo do dashboard",
+            desc: settings.backgroundImage || "Nenhuma imagem definida. A imagem cobre toda a área do dashboard.",
+            control: {
+              type: "file" as const,
+              key: "backgroundImage",
+              filter: (f: TFile) => IMAGE_EXTENSIONS.test(f.name),
+            },
+          },
+        ],
+      },
+      // ── CSS customizado ──────────────────────────────────────────────────
+      {
+        type: "group" as const,
+        heading: "CSS customizado",
+        items: [
+          {
+            name: "CSS personalizado",
+            desc: "Edite aqui as customizações de aparência. As mudanças são aplicadas em tempo real.",
+            control: { type: "textarea" as const, key: "customCss", rows: 18 },
+          },
+          {
+            name: "Importar arquivo .css",
+            desc: "Carrega um arquivo .css do computador e substitui o CSS atual.",
+            render: (setting: Setting) => {
+              setting.addButton((btn) =>
+                btn.setButtonText("Carregar arquivo").setIcon("upload").onClick(() => {
+                  const input = createEl("input");
+                  input.type = "file";
+                  input.accept = ".css";
+                  input.addEventListener("change", () => {
+                    void (async () => {
+                      const file = input.files?.[0];
+                      if (!file) return;
+                      this.plugin.settings.customCss = await file.text();
+                      await this.plugin.saveSettings();
+                      await this.plugin.applyCustomCss();
+                      this.update();
+                    })();
+                  });
+                  input.click();
+                })
+              );
+            },
+          },
+          {
+            name: "Resetar CSS",
+            desc: "Remove todas as customizações e volta ao CSS padrão.",
+            render: (setting: Setting) => {
+              setting.addButton((btn) =>
+                btn.setButtonText("Resetar para o padrão").setDestructive().onClick(() => {
+                  void (async () => {
+                    this.plugin.settings.customCss = DEFAULT_CSS;
+                    await this.plugin.saveSettings();
+                    await this.plugin.applyCustomCss();
+                    this.update();
+                  })();
+                })
+              );
+            },
+          },
+        ],
+      },
+      // ── Temas ────────────────────────────────────────────────────────────
+      {
+        type: "group" as const,
+        heading: "Temas",
+        items: [
+          {
+            name: "Modo de cor",
+            desc: "Alternar entre claro e escuro.",
+            render: (setting: Setting) => {
+              const isDark = document.body.classList.contains("theme-dark");
+              setting.addButton((btn) => {
+                btn.setButtonText("☀️ Claro");
+                if (!isDark) btn.setCta();
+                btn.onClick(() => { this.setColorScheme("moonstone"); this.update(); });
+              });
+              setting.addButton((btn) => {
+                btn.setButtonText("🌙 Escuro");
+                if (isDark) btn.setCta();
+                btn.onClick(() => { this.setColorScheme("obsidian"); this.update(); });
+              });
+            },
+          },
+          {
+            name: "Tema visual",
+            render: (setting: Setting) => {
+              const customCss = (this.app as unknown as { customCss: ObsidianCustomCss }).customCss;
+              if (!customCss) return;
+              const themes: string[] = customCss.themes ?? [];
+              const current: string = customCss.theme ?? "";
+              if (themes.length === 0) {
+                setting.setDesc("Nenhum tema instalado. Vá em Configurações → Aparência → Temas.");
+                return;
+              }
+              setting.setDesc(`Ativo: ${current || "Padrão"}`).addDropdown((dd) => {
+                dd.addOption("", "Padrão");
+                themes.forEach((t) => { dd.addOption(t, t); });
+                dd.setValue(current);
+                dd.onChange((v) => {
+                  if (typeof customCss.setTheme === "function") customCss.setTheme(v);
+                });
+              });
+            },
+          },
+        ],
+      },
+      // ── Atalhos fixados ──────────────────────────────────────────────────
+      {
+        type: "list" as const,
+        heading: "Atalhos fixados",
+        emptyState: "Nenhum atalho adicionado ainda. Use o botão direito no explorador de arquivos.",
+        onDelete: (index: number) => {
+          const path = this.plugin.settings.shortcuts[index]?.path;
+          if (path) void this.plugin.removeShortcut(path).then(() => this.update());
+        },
+        items: settings.shortcuts.map((s) => ({
+          name: s.name,
+          desc: `${s.type === "folder" ? "📁" : "📄"} ${s.path}`,
+        })),
+      },
+    ] as SettingDefinitionItem[];
   }
 
-  // ── General ────────────────────────────────────────────────────────────────
-
-  private renderGeneralSection(el: HTMLElement) {
-    new Setting(el).setName("Geral").setHeading();
-    new Setting(el)
-      .setName("Título do Dashboard")
-      .setDesc("Texto exibido como título no painel principal.")
-      .addText((t) =>
-        t
-          .setPlaceholder("Dashboard")
-          .setValue(this.plugin.settings.dashboardTitle)
-          .onChange((value) => {
-            this.plugin.settings.dashboardTitle = value;
-            void this.plugin.saveSettings().then(() => this.plugin.refreshDashboard());
-          })
-      );
-    new Setting(el)
-      .setName("Mostrar título")
-      .setDesc("Exibir o título na área do cabeçalho.")
-      .addToggle((t) =>
-        t.setValue(this.plugin.settings.showTitle).onChange((v) => {
-          this.plugin.settings.showTitle = v;
-          void this.plugin.saveSettings().then(() => this.plugin.refreshDashboard());
-        })
-      );
-    new Setting(el)
-      .setName("Mostrar cabeçalho")
-      .setDesc("Exibir a área de cabeçalho (banner/imagem de capa). Ao desativar, o título e a imagem de capa ficam ocultos.")
-      .addToggle((t) =>
-        t.setValue(this.plugin.settings.showHeader).onChange((v) => {
-          this.plugin.settings.showHeader = v;
-          void this.plugin.saveSettings().then(() => this.plugin.refreshDashboard());
-        })
-      );
-    new Setting(el)
-      .setName("Abrir ao iniciar")
-      .setDesc("Abrir o Dashboard automaticamente quando o Obsidian iniciar.")
-      .addToggle((t) =>
-        t.setValue(this.plugin.settings.openOnStartup).onChange((v) => {
-          this.plugin.settings.openOnStartup = v;
-          void this.plugin.saveSettings();
-        })
-      );
-  }
-
-  // ── Header image ───────────────────────────────────────────────────────────
-
-  private renderHeaderSection(el: HTMLElement) {
-    new Setting(el).setName("Imagem de capa").setHeading();
-
-    const current = this.plugin.settings.headerImage;
-    new Setting(el)
-      .setName("Imagem")
-      .setDesc(current || "Nenhuma imagem definida.")
-      .addButton((btn) =>
-        btn
-          .setButtonText("Escolher")
-          .setIcon("image")
-          .onClick(() => {
-            new ImagePickerModal(this.app, (file) => {
-              void (async () => {
-                this.plugin.settings.headerImage = file.path;
-                await this.plugin.saveSettings();
-                this.plugin.refreshDashboard();
-                this.display();
-              })();
-            }).open();
-          })
-      )
-      .addButton((btn) =>
-        btn
-          .setButtonText("Remover")
-          .setDestructive()
-          .setDisabled(!current)
-          .onClick(() => {
-            void (async () => {
-              this.plugin.settings.headerImage = "";
-              await this.plugin.saveSettings();
-              this.plugin.refreshDashboard();
-              this.display();
-            })();
-          })
-      );
-
-    new Setting(el)
-      .setName("Altura da capa (px)")
-      .addSlider((s) =>
-        s
-          .setLimits(120, 500, 10)
-          .setValue(this.plugin.settings.headerHeight)
-          .onChange((v) => {
-            this.plugin.settings.headerHeight = v;
-            void this.plugin.saveSettings().then(() => this.plugin.refreshDashboard());
-          })
-      );
-  }
-
-  // ── Background image ───────────────────────────────────────────────────────
-
-  private renderBackgroundSection(el: HTMLElement) {
-    new Setting(el).setName("Imagem de fundo").setHeading();
-
-    const current = this.plugin.settings.backgroundImage;
-    new Setting(el)
-      .setName("Imagem de fundo do dashboard")
-      .setDesc(current || "Nenhuma imagem definida. A imagem cobre toda a área do dashboard.")
-      .addButton((btn) =>
-        btn
-          .setButtonText("Escolher")
-          .setIcon("image")
-          .onClick(() => {
-            new ImagePickerModal(this.app, (file) => {
-              void (async () => {
-                this.plugin.settings.backgroundImage = file.path;
-                await this.plugin.saveSettings();
-                this.plugin.refreshDashboard();
-                this.display();
-              })();
-            }).open();
-          })
-      )
-      .addButton((btn) =>
-        btn
-          .setButtonText("Remover")
-          .setDestructive()
-          .setDisabled(!current)
-          .onClick(() => {
-            void (async () => {
-              this.plugin.settings.backgroundImage = "";
-              await this.plugin.saveSettings();
-              this.plugin.refreshDashboard();
-              this.display();
-            })();
-          })
-      );
-  }
-
-  // ── Custom CSS ─────────────────────────────────────────────────────────────
-
-  private renderCssSection(el: HTMLElement) {
-    new Setting(el).setName("CSS customizado").setHeading();
-
-    new Setting(el)
-      .setName("Importar arquivo .css")
-      .setDesc("Carrega um arquivo .css do seu computador e substitui o CSS atual.")
-      .addButton((btn) =>
-        btn
-          .setButtonText("Carregar arquivo")
-          .setIcon("upload")
-          .onClick(() => {
-            const input = createEl("input");
-            input.type = "file";
-            input.accept = ".css";
-            input.addEventListener("change", () => {
-              void (async () => {
-                const file = input.files?.[0];
-                if (!file) return;
-                const text = await file.text();
-                this.plugin.settings.customCss = text;
-                await this.plugin.saveSettings();
-                await this.plugin.applyCustomCss();
-                this.display();
-              })();
-            });
-            input.click();
-          })
-      );
-
-    el.createEl("p", {
-      text: "Ou edite diretamente abaixo. As mudanças são aplicadas em tempo real.",
-      cls: "setting-item-description",
-    });
-
-    const wrapper = el.createDiv("dashboard-css-editor-wrapper");
-    const textarea = wrapper.createEl("textarea", {
-      cls: "dashboard-css-editor",
-    });
-    textarea.value = this.plugin.settings.customCss;
-    textarea.rows = 18;
-    textarea.spellcheck = false;
-
-    textarea.addEventListener("input", () => {
-      void (async () => {
-        this.plugin.settings.customCss = textarea.value;
-        await this.plugin.saveSettings();
-        await this.plugin.applyCustomCss();
-      })();
-    });
-
-    new Setting(el)
-      .setName("Resetar CSS")
-      .setDesc("Remove todas as customizações e volta ao CSS padrão.")
-      .addButton((btn) =>
-        btn
-          .setButtonText("Resetar para o padrão")
-          .setDestructive()
-          .onClick(() => {
-            void (async () => {
-              this.plugin.settings.customCss = DEFAULT_CSS;
-              await this.plugin.saveSettings();
-              await this.plugin.applyCustomCss();
-              this.display();
-            })();
-          })
-      );
-  }
-
-  // ── Themes ────────────────────────────────────────────────────────────────
-
-  private renderThemeSection(el: HTMLElement) {
-    new Setting(el).setName("Temas").setHeading();
-
-    const isDark = document.body.classList.contains("theme-dark");
-
-    const modeSetting = new Setting(el)
-      .setName("Modo de cor")
-      .setDesc("Alternar entre claro e escuro.");
-
-    modeSetting.addButton((btn) => {
-      btn.setButtonText("☀️ Claro");
-      if (!isDark) btn.setCta();
-      btn.onClick(() => { this.setColorScheme("moonstone"); this.display(); });
-    });
-    modeSetting.addButton((btn) => {
-      btn.setButtonText("🌙 Escuro");
-      if (isDark) btn.setCta();
-      btn.onClick(() => { this.setColorScheme("obsidian"); this.display(); });
-    });
-
-    const internalApp = this.app as unknown as { customCss: ObsidianCustomCss };
-    const customCss = internalApp.customCss;
-    if (!customCss) return;
-
-    const installedThemes: string[] = customCss.themes ?? [];
-    const currentTheme: string = customCss.theme ?? "";
-
-    if (installedThemes.length === 0) {
-      new Setting(el)
-        .setName("Tema visual")
-        .setDesc("Nenhum tema instalado. Vá em Configurações → Aparência → Temas.");
-      return;
+  override async setControlValue(key: string, value: unknown): Promise<void> {
+    await super.setControlValue(key, value);
+    if (key === "customCss") {
+      await this.plugin.applyCustomCss();
+    } else if (key !== "openOnStartup") {
+      this.plugin.refreshDashboard();
     }
-
-    new Setting(el)
-      .setName("Tema visual")
-      .setDesc(`Ativo: ${currentTheme || "Padrão"}`)
-      .addDropdown((dd) => {
-        dd.addOption("", "Padrão");
-        installedThemes.forEach((t) => { dd.addOption(t, t); });
-        dd.setValue(currentTheme);
-        dd.onChange((v) => {
-          if (typeof customCss.setTheme === "function") customCss.setTheme(v);
-        });
-      });
   }
 
   private setColorScheme(scheme: "moonstone" | "obsidian") {
@@ -1024,35 +945,4 @@ class DashboardSettingTab extends PluginSettingTab {
     document.body.addClass(scheme === "obsidian" ? "theme-dark" : "theme-light");
   }
 
-  // ── Shortcuts ─────────────────────────────────────────────────────────────
-
-  private renderShortcutsSection(el: HTMLElement) {
-    new Setting(el).setName("Atalhos fixados").setHeading();
-
-    if (this.plugin.settings.shortcuts.length === 0) {
-      el.createEl("p", {
-        text: "Nenhum atalho adicionado ainda. Use o botão direito no explorador de arquivos.",
-        cls: "setting-item-description",
-      });
-      return;
-    }
-
-    this.plugin.settings.shortcuts.forEach((shortcut) => {
-      new Setting(el)
-        .setName(shortcut.name)
-        .setDesc(`${shortcut.type === "folder" ? "📁" : "📄"} ${shortcut.path}`)
-        .addButton((btn) =>
-          btn
-            .setIcon("trash")
-            .setDestructive()
-            .setTooltip("Remover")
-            .onClick(() => {
-              void (async () => {
-                await this.plugin.removeShortcut(shortcut.path);
-                this.display();
-              })();
-            })
-        );
-    });
-  }
 }
