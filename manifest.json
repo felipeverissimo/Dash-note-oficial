@@ -2,7 +2,7 @@
   "id": "dash-note",
   "name": "Dash-note",
   "version": "1.0.0",
-  "minAppVersion": "1.13.0",
+  "minAppVersion": "1.12.7",
   "description": "Pin notes and folders as one-click shortcut cards on a customizable home dashboard that opens automatically on startup.",
   "author": "Felipe Veríssimo",
   "authorUrl": "https://github.com/felipeverissimo",
