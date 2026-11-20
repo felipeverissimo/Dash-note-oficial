@@ -1,6 +1,6 @@
 {
   "name": "obsidian-dashboard",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A customizable home dashboard with shortcuts to your favorite notes and folders.",
   "main": "main.js",
   "author": "Felipe Veríssimo",
