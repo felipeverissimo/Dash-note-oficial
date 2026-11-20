@@ -754,7 +754,7 @@ class DashboardSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     // ── Geral ────────────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Geral" });
+    new Setting(containerEl).setName("Geral").setHeading();
 
     new Setting(containerEl)
       .setName("Título do Dashboard")
@@ -763,10 +763,12 @@ class DashboardSettingTab extends PluginSettingTab {
         text
           .setPlaceholder("Dashboard")
           .setValue(settings.dashboardTitle)
-          .onChange(async (value) => {
-            settings.dashboardTitle = value;
-            await plugin.saveSettings();
-            plugin.refreshDashboard();
+          .onChange((value) => {
+            void (async () => {
+              settings.dashboardTitle = value;
+              await plugin.saveSettings();
+              plugin.refreshDashboard();
+            })();
           })
       );
 
@@ -774,10 +776,12 @@ class DashboardSettingTab extends PluginSettingTab {
       .setName("Mostrar título")
       .setDesc("Exibir o título na área do cabeçalho.")
       .addToggle((toggle) =>
-        toggle.setValue(settings.showTitle).onChange(async (value) => {
-          settings.showTitle = value;
-          await plugin.saveSettings();
-          plugin.refreshDashboard();
+        toggle.setValue(settings.showTitle).onChange((value) => {
+          void (async () => {
+            settings.showTitle = value;
+            await plugin.saveSettings();
+            plugin.refreshDashboard();
+          })();
         })
       );
 
@@ -785,10 +789,12 @@ class DashboardSettingTab extends PluginSettingTab {
       .setName("Mostrar cabeçalho")
       .setDesc("Exibir a área de cabeçalho. Ao desativar, o título e a imagem de capa ficam ocultos.")
       .addToggle((toggle) =>
-        toggle.setValue(settings.showHeader).onChange(async (value) => {
-          settings.showHeader = value;
-          await plugin.saveSettings();
-          plugin.refreshDashboard();
+        toggle.setValue(settings.showHeader).onChange((value) => {
+          void (async () => {
+            settings.showHeader = value;
+            await plugin.saveSettings();
+            plugin.refreshDashboard();
+          })();
         })
       );
 
@@ -796,14 +802,16 @@ class DashboardSettingTab extends PluginSettingTab {
       .setName("Abrir ao iniciar")
       .setDesc("Abrir o Dashboard automaticamente quando o app iniciar.")
       .addToggle((toggle) =>
-        toggle.setValue(settings.openOnStartup).onChange(async (value) => {
-          settings.openOnStartup = value;
-          await plugin.saveSettings();
+        toggle.setValue(settings.openOnStartup).onChange((value) => {
+          void (async () => {
+            settings.openOnStartup = value;
+            await plugin.saveSettings();
+          })();
         })
       );
 
     // ── Imagem de capa ───────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Imagem de capa" });
+    new Setting(containerEl).setName("Imagem de capa").setHeading();
 
     new Setting(containerEl)
       .setName("Imagem")
@@ -812,19 +820,23 @@ class DashboardSettingTab extends PluginSettingTab {
         text
           .setPlaceholder("Caminho da imagem no vault")
           .setValue(settings.headerImage)
-          .onChange(async (value) => {
-            settings.headerImage = value;
-            await plugin.saveSettings();
-            plugin.refreshDashboard();
+          .onChange((value) => {
+            void (async () => {
+              settings.headerImage = value;
+              await plugin.saveSettings();
+              plugin.refreshDashboard();
+            })();
           })
       )
       .addButton((btn) =>
         btn.setButtonText("Buscar").setIcon("search").onClick(() => {
-          new ImagePickerModal(this.app, async (file) => {
-            settings.headerImage = file.path;
-            await plugin.saveSettings();
-            plugin.refreshDashboard();
-            this.display();
+          new ImagePickerModal(this.app, (file) => {
+            void (async () => {
+              settings.headerImage = file.path;
+              await plugin.saveSettings();
+              plugin.refreshDashboard();
+              this.display();
+            })();
           }).open();
         })
       );
@@ -835,16 +847,17 @@ class DashboardSettingTab extends PluginSettingTab {
         slider
           .setLimits(120, 500, 10)
           .setValue(settings.headerHeight)
-          .setDynamicTooltip()
-          .onChange(async (value) => {
-            settings.headerHeight = value;
-            await plugin.saveSettings();
-            plugin.refreshDashboard();
+          .onChange((value) => {
+            void (async () => {
+              settings.headerHeight = value;
+              await plugin.saveSettings();
+              plugin.refreshDashboard();
+            })();
           })
       );
 
     // ── Imagem de fundo ──────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Imagem de fundo" });
+    new Setting(containerEl).setName("Imagem de fundo").setHeading();
 
     new Setting(containerEl)
       .setName("Imagem de fundo do dashboard")
@@ -853,25 +866,29 @@ class DashboardSettingTab extends PluginSettingTab {
         text
           .setPlaceholder("Caminho da imagem no vault")
           .setValue(settings.backgroundImage)
-          .onChange(async (value) => {
-            settings.backgroundImage = value;
-            await plugin.saveSettings();
-            plugin.refreshDashboard();
+          .onChange((value) => {
+            void (async () => {
+              settings.backgroundImage = value;
+              await plugin.saveSettings();
+              plugin.refreshDashboard();
+            })();
           })
       )
       .addButton((btn) =>
         btn.setButtonText("Buscar").setIcon("search").onClick(() => {
-          new ImagePickerModal(this.app, async (file) => {
-            settings.backgroundImage = file.path;
-            await plugin.saveSettings();
-            plugin.refreshDashboard();
-            this.display();
+          new ImagePickerModal(this.app, (file) => {
+            void (async () => {
+              settings.backgroundImage = file.path;
+              await plugin.saveSettings();
+              plugin.refreshDashboard();
+              this.display();
+            })();
           }).open();
         })
       );
 
     // ── CSS customizado ──────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "CSS customizado" });
+    new Setting(containerEl).setName("CSS customizado").setHeading();
 
     new Setting(containerEl)
       .setName("CSS personalizado")
@@ -879,8 +896,7 @@ class DashboardSettingTab extends PluginSettingTab {
 
     const textarea = containerEl.createEl("textarea");
     textarea.rows = 18;
-    textarea.style.width = "100%";
-    textarea.style.fontFamily = "monospace";
+    textarea.setCssStyles({ width: "100%", fontFamily: "monospace" });
     textarea.value = settings.customCss;
     textarea.addEventListener("input", () => {
       void (async () => {
@@ -930,7 +946,7 @@ class DashboardSettingTab extends PluginSettingTab {
       );
 
     // ── Temas ────────────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Temas" });
+    new Setting(containerEl).setName("Temas").setHeading();
 
     const isDark = document.body.classList.contains("theme-dark");
     new Setting(containerEl)
@@ -969,7 +985,7 @@ class DashboardSettingTab extends PluginSettingTab {
     }
 
     // ── Atalhos fixados ──────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Atalhos fixados" });
+    new Setting(containerEl).setName("Atalhos fixados").setHeading();
 
     if (settings.shortcuts.length === 0) {
       containerEl.createEl("p", {
